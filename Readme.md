@@ -4,14 +4,14 @@ This percolate service takes a flat file comma separated and transforms (clean, 
 It uses IOC, Apache Commons file utils, Mocks, metrics and Rest endpoints.
 </b>
 <B> The current service called PercolateService will expose the process as RESTFull. The deployment creates a single jar
-Instructions:
-1. Make sure you have JDK 1.8. Shld be good with 1.7 but make sure to change POM
-2. mvn clean install. This command shld produce a uber jar.
-3. java -jar percolate-service-1.0-SNAPSHOT-jar-with-dependencies.jar
-4. http://localhost:8080/percolate/test
-Send the raw file as 'content to send' via your favorite Rest Service test.
+Instructions:<br>
+1. Make sure you have JDK 1.8. Shld be good with 1.7 but make sure to change POM<br>
+2. mvn clean install. This command shld produce a uber jar.<br>
+3. java -jar percolate-service-1.0-SNAPSHOT-jar-with-dependencies.jar<br>
+4. http://localhost:8080/percolate/test<br>
+Send the raw file as 'content to send' via your favorite Rest Service test.<br>
 </B>
-
+<br>
 Design Requirements:
 
 - Extensible Design
