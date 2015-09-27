@@ -1,74 +1,94 @@
 package com.percolate.integrations;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.Reader;
 import java.io.StringReader;
-import java.nio.file.Path;
-import java.util.Properties;
-import java.nio.file.Paths;
-import java.nio.file.Files;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+import java.io.Writer;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVRecord;
+import javax.ws.rs.GET;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.MediaType;
 
-import com.google.common.collect.Iterables;
-import com.percolate.integrations.exception.PercolateServiceConfigLoadingException;
-import com.percolate.integrations.model.User;
-import com.percolate.integrations.util.ConfigFileReader;
+import org.boon.json.JsonFactory;
+import org.boon.json.ObjectMapper;
+
 import com.percolate.integrations.exception.PercolateServiceException;
-import com.google.common.collect.Iterators;
+import com.percolate.integrations.exception.PercolateServiceInputDataException;
+import com.percolate.integrations.parser.StringRowListProcessor;
+import com.percolate.integrations.util.FileHelper;
+import com.univocity.parsers.csv.CsvParser;
+import com.univocity.parsers.csv.CsvParserSettings;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by vijay.polsani on 9/25/15.
  */
 @Slf4j
+@Path("/percolate")
 public class PercolateService implements PercolateFileToJson {
-	private static final Properties properties = new ConfigFileReader().loadProperties();
-	private final static Charset ENCODING = StandardCharsets.UTF_8;
+
+	private final CsvParserSettings csvParserSettings = new CsvParserSettings();
+	private final StringRowListProcessor stringRowListProcessor = new StringRowListProcessor();
+	private final ObjectMapper objectMapper = JsonFactory.create();
+	private final CsvParser csvParser;
 
 	public PercolateService() {
+		csvParserSettings.setLineSeparatorDetectionEnabled(true);
+		csvParserSettings.setHeaderExtractionEnabled(false);
+		csvParserSettings.setNullValue("NA");
+		csvParserSettings.setRowProcessor(stringRowListProcessor);
+		csvParser = new CsvParser(csvParserSettings);
+	}
+
+	@Override
+	@POST
+	@Path("test")
+	@Produces(MediaType.APPLICATION_JSON)
+	public String getJson(String rawData) throws PercolateServiceException {
+		log.info("Input data: " + rawData);
+		csvParser.parse(new StringReader(rawData));
+		while (stringRowListProcessor.getJsonOutput().peek() != null)
+			return (objectMapper.writeValueAsString(stringRowListProcessor.getJsonOutput().poll()));
+		return "";
+	}
+
+	@Override
+	public String getFormattedJson(String inputRawData, String outDataFile) throws PercolateServiceException {
+		log.info("Input File location: " + inputRawData);
+		log.info("Output File location: " + outDataFile);
+		try {
+			csvParser.parse(FileHelper.getReader(inputRawData));
+		} catch (PercolateServiceInputDataException e) {
+			e.printStackTrace();
+			throw new PercolateServiceException(e.getLocalizedMessage(), "1000");
+		}
+		String jsonData = null;
+		while (stringRowListProcessor.getJsonOutput().peek() != null)
+			jsonData = (objectMapper.writeValueAsString(stringRowListProcessor.getJsonOutput().poll()));
+		try {
+			Writer writer = FileHelper.getWriter(outDataFile);
+			writer.write(jsonData);
+			writer.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+			log.error("JSON Write Exception");
+			throw new PercolateServiceException("Sorry no way out. Please contact helpdesk!", "0000");
+		}
+		return jsonData;
 	}
 
 	public static void main(String args[]) {
-		PercolateService percolateService = new PercolateService();
+		log.info("Staring Server.");
+		PercolateFileToJson percolateService = new PercolateService();
 		try {
-			percolateService.readTextFileAlternate(properties.getProperty("input_file_location"));
-		}catch (IOException  fe){
-			fe.printStackTrace();
-		}
-	}
-	public void readTextFileAlternate(String inputFileName) throws IOException {
-		Path path = Paths.get(inputFileName);
-		try (BufferedReader reader = Files.newBufferedReader(path, ENCODING)){
-			StringBuilder sb = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				getCleanedJson(line);
-			}
-		}
-	}
-	@Override
-	public String getCleanedJson(String inputRawData) {
-		try (Reader inputReader = new StringReader(inputRawData);) {
-			Iterable<CSVRecord> csvRecords = CSVFormat.newFormat(',').parse(inputReader);
-			//log.info("Number of records: "+ Iterables.size(csvRecords));
-
-			for (CSVRecord csvRecord : csvRecords) {
-				log.info(csvRecord.get(0) + " , " + csvRecord.get(1) + " , " + csvRecord.get(2) + " , " + csvRecord.get(3) );
-			}
-
-		} catch (IOException e) {
-			log.error("CSV Parsing Error. %s", e.getLocalizedMessage());
+			percolateService.getFormattedJson("", "");
+		} catch (PercolateServiceException e) {
 			e.printStackTrace();
+			log.error("Bootup Exception." + e.getLocalizedMessage());
 		}
-		final User user = new User();
-		return null;
 	}
+
 }
